@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import random
+import math
 from fishing_game_core.game_tree import Node
 from fishing_game_core.player_utils import PlayerController
 from fishing_game_core.shared import ACTION_TO_STR
@@ -103,12 +104,14 @@ class PlayerControllerMinimax(PlayerController):
 
 class minmax_algorithm:
     def __init__(self, initial_data):
-        print("##initializing minmax_model")
+        #print("##initializing minmax_model")
         self.initial_data = initial_data
         self.next_children = []
         self.bestPossibleMove = 0
         self.counter = 0
-        self.type = 'closest_fish'
+        self.type = 'combination'
+        self.target = None
+        self.last_check = None
 
     def reset(self):
         self.counter = 0
@@ -117,25 +120,76 @@ class minmax_algorithm:
     def hursitic(self,node):
         if self.type == 'score':
             return node.state.player_scores[0]-node.state.player_scores[1]
-        if self.type == 'closest_fish':
+
+        if self.type == 'combination':
             fish_list = node.state.fish_positions
-            hook_location = node.state.hook_positions[0]
-            closest = float('inf')
+            fish_score = node.state.fish_scores
+            caught_check = node.state.get_caught()[1]
+
+            my_hook = node.state.hook_positions[0]
+            oponent_hook = node.state.hook_positions[1]
+
+            score_diff = node.state.player_scores[0]-node.state.player_scores[1]
+
+            closest = my_distance = float('inf')
+
             for key in fish_list:
                 fish = fish_list[key]
-                distance = (hook_location[0] - fish[0])**2 + (hook_location[1] - fish [1])**2
-                if distance < closest:
-                    closest = distance
+                fish_s = fish_score[key]
+                if fish_s >= 0 and caught_check != key :
+                    my_distance = (my_hook[0] - fish[0])**2 + (my_hook[1] - fish [1])**2
+                    oponent_distance = math.sqrt((oponent_hook[0] - fish[0])**2 + (oponent_hook[1] - fish [1])**2)
+                if my_distance < closest and oponent_distance >=1:
+                    self.target = key
+                    closest = my_distance
 
-            return -closest  
+
+            final_score = -closest + score_diff + fish_score[self.target]
+            return final_score  
 
 
 
+    def minmax_prune(self,CurrentNode,alpha=float('-inf'),beta=float('inf')):
+        
+        self.next_children = CurrentNode.compute_and_get_children()
+        self.counter+=1       
+        #print(self.counter)
+        if self.next_children == [] or CurrentNode.depth >=4:
+            huristic = self.hursitic(CurrentNode)
+            #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:", CurrentNode.move)
+            return  CurrentNode.move, huristic
 
+
+        else:
+            current_player = CurrentNode.state.player
+            bestPossible = float('-inf') if current_player == 0 else float ('inf')
+
+            for child in self.next_children:
+                #print("starting node player", CurrentNode.state.player)
+                m, v = self.minmax_prune(child,alpha,beta)
+
+                if current_player == 0 and v > bestPossible and self.target != None:  #if max turn
+                    bestPossible = v
+                    self.bestPossibleMove = m
+                    alpha = max(alpha,bestPossible)
+
+                elif current_player == 1 and v < bestPossible and self.target != None: # if min turn
+                    bestPossible = v
+                    self.bestPossibleMove = m
+                    beta = min(beta,bestPossible)
+
+                if beta <= alpha:
+                    #print("shut down")
+                    break
+
+            return  self.bestPossibleMove, bestPossible   
+
+        
     def minmax_normal(self,CurrentNode):
+        
         self.next_children = CurrentNode.compute_and_get_children()
 
-        if self.next_children == [] or CurrentNode.depth >= 6:
+        if self.next_children == [] or CurrentNode.depth >= 9:
             huristic = self.hursitic(CurrentNode)
             #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:", CurrentNode.move)
             return  CurrentNode.move, huristic
@@ -159,51 +213,6 @@ class minmax_algorithm:
                         self.bestPossibleMove = m
                     
                 return self.bestPossibleMove, bestPossible
-
-
-    def minmax_prune(self,CurrentNode,alpha=float('-inf'),beta=float('inf')):
-        self.next_children = CurrentNode.compute_and_get_children()
-        self.counter+=1       
-        
-        #print(self.counter)
-        if self.next_children == [] or CurrentNode.depth >=3:
-            huristic = self.hursitic(CurrentNode)
-            #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:", CurrentNode.move)
-            return  CurrentNode.move, huristic
-
-
-        
-        else:
-            current_player = self.next_children[0].state.player   
-            if current_player == 0: 
-                bestPossible = float('-inf')
-                for child in self.next_children:
-                    #print( "m", m)
-                    m, v = self.minmax_prune(child,alpha,beta)
-                    if v > bestPossible:
-                        bestPossible = v
-                        self.bestPossibleMove = m
-                    alpha = max(alpha,bestPossible)
-                    if beta <= alpha:
-                        break
-                return  self.bestPossibleMove, bestPossible   
-
-            else: #current_player == B
-                bestPossible = float('inf')
-                for child in self.next_children:
-                    #print( "m", m)
-                    m, v = self.minmax_prune(child,alpha,beta)
-                    if v < bestPossible:
-                        bestPossible = v
-                        self.bestPossibleMove = m
-                    beta = min(beta,bestPossible)
-                    if beta <= alpha:
-                        break
-                return  self.bestPossibleMove, bestPossible   
-
-
-        
-
 
     # def minmax_prune(self,CurrentNode,alpha=float('-inf'),beta=float('inf')):
     #     self.next_children = CurrentNode.compute_and_get_children()
