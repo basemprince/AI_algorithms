@@ -73,6 +73,8 @@ class PlayerControllerMinimax(PlayerController):
         """
         model = minmax_algorithm(initial_data)
 
+        
+        # EDIT THIS METHOD TO RETURN A MINIMAX MODEL ###
         return model
 
     def search_best_next_move(self, model, initial_tree_node):
@@ -92,8 +94,8 @@ class PlayerControllerMinimax(PlayerController):
         # NOTE: Don't forget to initialize the children of the current node 
         #       with its compute_and_get_children() method!
 
-        start_time = time()
-        best_possible_move,_= model.minmax_prune(initial_tree_node,start_time)
+
+        best_possible_move,_= model.minmax_prune(initial_tree_node)
 
         return ACTION_TO_STR[best_possible_move]
 
@@ -106,7 +108,11 @@ class minmax_algorithm:
         self.counter = 0
         self.type = 'combination'
         self.target = None
-        self.y_check = 0
+        self.last_check = None
+
+    def reset(self):
+        self.counter = 0
+
 
     def hursitic(self,node):
         if self.type == 'score':
@@ -119,73 +125,44 @@ class minmax_algorithm:
 
             my_hook = node.state.hook_positions[0]
             oponent_hook = node.state.hook_positions[1]
-            print(my_hook)
+
             score_diff = node.state.player_scores[0]-node.state.player_scores[1]
-            self.y_check = 0
+
             closest = my_distance = float('inf')
-            fish_away_count = 0.0
+
             for key in fish_list:
                 fish = fish_list[key]
                 fish_s = fish_score[key]
+                if fish_s >= 0 and caught_check != key :
+                    my_distance = (my_hook[0] - fish[0])**2 + (my_hook[1] - fish [1])**2
+                    oponent_distance = math.sqrt((oponent_hook[0] - fish[0])**2 + (oponent_hook[1] - fish [1])**2)
+                if my_distance < closest and oponent_distance >=1:
+                    self.target = key
+                    closest = my_distance
 
-                my_distance = ((my_hook[0] - fish[0])**2 + (my_hook[1] - fish [1])**2)
-                oponent_distance = math.sqrt((oponent_hook[0] - fish[0])**2 + (oponent_hook[1] - fish [1])**2)
 
-                #check if fish is worth going after, if this fish is the closest, and oponent is not within 1 block
-                if fish_s >= 0 and caught_check != key and my_distance < closest and oponent_distance >=1:
-                    self.target = fish_s
-                    closest = my_distance                 
-
-                #check how many fish are on other side
-                if fish[0] > oponent_hook[0] and oponent_hook[0] > my_hook[0]:
-                    fish_away_count += 1
-                if fish[1] < my_hook[1]:
-                    self.y_check += 1
-
-            percent_away = fish_away_count / len(fish_list) if len(fish_list) !=0 else 1
-
-            # move ship to the other side if remaning fish are there
-            if percent_away >= 0.99 and node.move == 3:
-                closest = float('-inf')
-            try:
-                final_score = -closest + score_diff  + fish_score[self.target]
-            except:
-                final_score = -closest + score_diff
-
+            final_score = -closest + score_diff + fish_score[self.target]
+            #final_score = 2
             return final_score  
 
-    def illegal_moves(self,Node):
-        #print(self.y_check)
-        illegal = False
-        if Node.state.hook_positions[1][0] - Node.state.hook_positions[0][0] == 1 and Node.move == 4:
-            illegal = True
-        elif Node.state.hook_positions[0][0] - Node.state.hook_positions[1][0] == 1 and Node.move == 3:
-            illegal = True
-        elif self.y_check > 0 and Node.move == 1:
-            illegal = True
-        return illegal
 
-    def minmax_prune(self,CurrentNode,start_time,alpha=float('-inf'),beta=float('inf')):
-        elapsed_time = time() - start_time
+
+    def minmax_prune(self,CurrentNode,alpha=float('-inf'),beta=float('inf')):
 
         self.next_children = CurrentNode.compute_and_get_children()
 
-        if self.next_children == []   or elapsed_time >= 10*1e-3: #
+        if self.next_children == []  or CurrentNode.depth >= 3:
             huristic = self.hursitic(CurrentNode)
             #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:", CurrentNode.move)
             return  CurrentNode.move, huristic
+
 
         else:
             current_player = CurrentNode.state.player
             bestPossible = float('-inf') if current_player == 0 else float ('inf')
 
             for child in self.next_children:
-               # print (child.state.hook_positions[0][0] , "   " ,child.state.hook_positions[1][0])
-                if self.illegal_moves(child):
-                    #print("whatsup")
-                    continue
-
-                m, v = self.minmax_prune(child,start_time,alpha,beta)
+                m, v = self.minmax_prune(child,alpha,beta)
 
                 if current_player == 0 and v > bestPossible and self.target != None:  #if max turn
                     bestPossible = v
@@ -200,4 +177,33 @@ class minmax_algorithm:
                 if beta <= alpha:
                     break
 
-            return  self.bestPossibleMove, bestPossible
+            return  self.bestPossibleMove, bestPossible   
+
+        
+    def minmax_normal(self,CurrentNode):
+        
+        self.next_children = CurrentNode.compute_and_get_children()
+
+        if self.next_children == [] or CurrentNode.depth >= 3:
+            huristic = self.hursitic(CurrentNode)
+            return  CurrentNode.move, huristic
+        else:
+            current_player = self.next_children[0].state.player
+            if current_player == 0:
+                bestPossible = float('-inf')
+                for child in self.next_children:
+                    m, v = self.minmax_normal(child)
+                    if v > bestPossible:
+                        bestPossible = v
+                        self.bestPossibleMove = m
+                return  self.bestPossibleMove, bestPossible
+                
+            else: #current_player == B
+                bestPossible = float('inf')
+                for child in self.next_children:
+                    m, v = self.minmax_normal(child)
+                    if v < bestPossible:
+                        bestPossible = v
+                        self.bestPossibleMove = m
+                    
+                return self.bestPossibleMove, bestPossible
