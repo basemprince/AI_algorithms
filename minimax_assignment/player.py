@@ -93,8 +93,10 @@ class PlayerControllerMinimax(PlayerController):
         #       with its compute_and_get_children() method!
         
         start_time = time()
-        best_possible_move,_= model.minmax_prune(initial_tree_node,start_time)
-
+        
+        #best_possible_move,_= model.minmax_prune(initial_tree_node,start_time)
+        best_possible_move,_= model.iterativeDeepening(initial_tree_node,start_time)
+        #print(ACTION_TO_STR[best_possible_move], "  " , _)
         return ACTION_TO_STR[best_possible_move]
 
 
@@ -108,6 +110,7 @@ class minmax_algorithm:
         self.target = None
         self.y_check = 0
         self.subdivisions = subdivisions
+        self.deepest = 0
 
     def hursitic(self,node):
         if self.type == 'score':
@@ -115,8 +118,10 @@ class minmax_algorithm:
 
         if self.type == 'combination':
             fish_list = node.state.fish_positions
+            #print("fish list length" , len(fish_list))
             fish_score = node.state.fish_scores
-            caught_check = node.state.get_caught()[1]
+            caught_check_me = node.state.get_caught()[0]
+            caught_check_op = node.state.get_caught()[1]
 
             my_hook = node.state.hook_positions[0]
             oponent_hook = node.state.hook_positions[1]
@@ -124,6 +129,11 @@ class minmax_algorithm:
             self.y_check = 0
             closest = my_distance = float('inf')
             fish_away_count = 0.0
+            
+            #print(len(fish_list) == 0 and caught_check_me is not None , "  ",  caught_check_me)
+            if len(fish_list) == 0 :
+                closest = float('-inf')
+
             for key in fish_list:
                 fish = fish_list[key]
                 fish_s = fish_score[key]
@@ -132,13 +142,17 @@ class minmax_algorithm:
                 my_distance2 = ((my_hook[0] - fish[0] + self.subdivisions)**2 + (my_hook[1] - fish [1])**2)
                 my_distance3 = ((my_hook[0] - fish[0] - self.subdivisions)**2 + (my_hook[1] - fish [1])**2)
                 my_distance = min(my_distance1,my_distance2,my_distance3)
-
-                oponent_distance = math.sqrt((oponent_hook[0] - fish[0])**2 + (oponent_hook[1] - fish [1])**2)
+                #print(my_distance)
+                
+                oponent_distance = ((oponent_hook[0] - fish[0])**2 + (oponent_hook[1] - fish [1])**2)
 
                 #check if fish is worth going after, if this fish is the closest, and oponent is not within 1 block
-                if fish_s >= 0 and caught_check != key and my_distance < closest and oponent_distance >=1:
+                if fish_s >= 0  and my_distance < closest  and caught_check_op != key:
                     self.target = key
-                    closest = my_distance                 
+                    if math.sqrt(oponent_distance) > math.sqrt(my_distance):
+                        closest = my_distance / oponent_distance
+                    else:
+                        closest = my_distance   
 
                 #check how many fish are on other side
                 if fish[0] > oponent_hook[0] and oponent_hook[0] > my_hook[0]:
@@ -152,7 +166,7 @@ class minmax_algorithm:
             if percent_away >= 0.99 and node.move == 3:
                 closest = float('-inf')
             try:
-                final_score = -closest + score_diff  + fish_score[self.target]
+                final_score = -closest   + fish_score[self.target] + score_diff
             except:
                 final_score = -closest + score_diff
 
@@ -165,7 +179,7 @@ class minmax_algorithm:
             illegal = True
         elif Node.state.hook_positions[0][0] - Node.state.hook_positions[1][0] == 1 and Node.move == 3:
             illegal = True
-        elif self.y_check == 0 and Node.move == 1:
+        if self.y_check == 0 and Node.move == 1:
             illegal = True
         return illegal
 
@@ -176,7 +190,7 @@ class minmax_algorithm:
 
         if self.next_children == []   or elapsed_time >= 8*1e-3: #
             huristic = self.hursitic(CurrentNode)
-            print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:",  ACTION_TO_STR[CurrentNode.move])
+            #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:",  ACTION_TO_STR[CurrentNode.move])
             return  CurrentNode.move, huristic
 
         else:
@@ -205,3 +219,57 @@ class minmax_algorithm:
                     break
 
             return  self.bestPossibleMove, bestPossible
+
+    def minmax_prune_IDS(self,CurrentNode,depth,alpha,beta):
+        self.next_children = CurrentNode.compute_and_get_children()
+
+        if self.next_children == []   or CurrentNode.depth >= depth:
+            huristic = self.hursitic(CurrentNode)
+            #print("hurisitic:" ,huristic, "depth:", CurrentNode.depth, "move:",  ACTION_TO_STR[CurrentNode.move])
+            return  CurrentNode.move, huristic
+
+        else:
+            current_player = CurrentNode.state.player
+            bestPossible = float('-inf') if current_player == 0 else float ('inf')
+
+            for child in self.next_children:
+                #print (child.state.hook_positions[0][0] , "   " ,child.state.hook_positions[1][0])
+                if self.illegal_moves(child):
+                    #print("whatsup")
+                    continue
+
+                m, v = self.minmax_prune_IDS(child,depth,alpha,beta)
+
+                if current_player == 0 and v > bestPossible and self.target != None:  #if max turn
+                    bestPossible = v
+                    self.bestPossibleMove = m
+                    alpha = max(alpha,bestPossible)
+
+                elif current_player == 1 and v < bestPossible and self.target != None: # if min turn
+                    bestPossible = v
+                    self.bestPossibleMove = m
+                    beta = min(beta,bestPossible)
+
+                if beta <= alpha:
+                    break
+
+            return  self.bestPossibleMove, bestPossible
+
+    def iterativeDeepening (self,CurrentNode,start_time):     
+        next_children = CurrentNode.compute_and_get_children()
+        allowedDepth = 850
+        bestPossible = float('-inf')
+        self.deepest = 0
+        for depth in range (1,allowedDepth): #while elapsed_time <= 8*1e-3:
+            elapsed_time = time() - start_time
+            if elapsed_time >= 13*1e-3: break
+
+            alpha=float('-inf')
+            beta=float('inf')     
+            if depth > self.deepest: self.deepest = depth
+            for child in next_children:
+                m, v = self.minmax_prune_IDS(child,alpha,beta,depth)
+                if v > bestPossible:
+                    bestPossible, self.bestPossibleMove = v, m
+        #print("max_depth", self.deepest)
+        return  self.bestPossibleMove, bestPossible
