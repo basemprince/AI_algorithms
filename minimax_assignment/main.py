@@ -7,6 +7,12 @@ from kivy.config import Config
 
 from fishing_game_core.shared import SettingLoader
 
+debug = False
+
+if debug:
+    threshold = float('inf')
+else:
+    threshold = 75*1e-3
 
 class Settings:
     def __init__(self):
@@ -19,7 +25,7 @@ class Settings:
         # Window size is immutable and equal to self.window_scale * (800, 600)
         self.window_scale = 1.0
         # Time threshold
-        self.time_threshold = float('inf') #75*1e-3
+        self.time_threshold =  threshold
         # Space subdivisions
         self.space_subdivisions = 20
         # Number of frames before an action is executed
