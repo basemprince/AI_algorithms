@@ -2,7 +2,7 @@
 
 """
 Author: Basem Shaker
-Assignment: HMM2
+Assignment: HMM3
 """
 
 import sys
@@ -11,7 +11,7 @@ from math import log as log
 
 def parse(arguments):
 
-    parser = argparse.ArgumentParser(description="hmm2 assignment")
+    parser = argparse.ArgumentParser(description="hmm3 assignment")
     parser.add_argument('input' , help="Input file", nargs='?', type=argparse.FileType(), default = sys.stdin)
 
     args = parser.parse_args(arguments)
@@ -46,6 +46,8 @@ def matrixCreator(array,rows,columns,intCheck=False):
 
     return matrix
 
+def dotProduct(vector1, vector2):
+    return sum(x*y for x,y in zip(vector1,vector2))
 
 def vectorMultiply(vector1,vector2):
     result = []
@@ -77,6 +79,43 @@ def matrixAddition(vector1,vector2):
         for x,y in zip(vector1,vector2):
             result.append(x+y) 
     return result
+
+def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
+    rows = len(emissionSequence[0])
+    columns = len(transMatrix)
+    alphaMatrix = [0] * rows * columns
+    alphaMatrix = matrixCreator(alphaMatrix,rows,columns)
+
+    alpha1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
+    for i in range(len(alphaMatrix[0])):
+        alphaMatrix[0][i]= alpha1[i]
+
+    for t in range(1, len(emissionSequence[0])):
+        for j in range(len(transMatrix)):
+            dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
+            alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
+
+    return alphaMatrix
+
+def betaPass(emissionSequence, transMatrix, emissionMatrix):
+    rows = len(emissionSequence[0])
+    columns = len(transMatrix)
+    betaMatrix = ([0] * (rows-1) * columns) + ([1]* columns)
+    betaMatrix = matrixCreator(betaMatrix,rows,columns)
+    print(betaMatrix)
+    beta1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
+
+    # for i in range(len(alphaMatrix[0])):
+    #     alphaMatrix[0][i]= alpha1[i]
+
+    # for t in range(1, len(emissionSequence[0])):
+    #     for j in range(len(transMatrix)):
+    #         dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
+    #         alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
+
+    return betaMatrix
+
+
 
 def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
     rows = len(emissionSequence[0])
@@ -127,7 +166,9 @@ def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
 
 
 transMatrix, emissionMatrix, initialState , emissionSequence = parse(sys.argv[1:])
+alphaMatrix = alphaPass(emissionSequence,transMatrix,emissionMatrix,initialState)
+betaMatrix  = betaPass(emissionSequence,transMatrix,emissionMatrix)
 likelySeq = viterbiAlg(emissionSequence,transMatrix,emissionMatrix,initialState)
 
-print(' '.join(map(str,likelySeq)))
+# print(' '.join(map(str,likelySeq)))
 
