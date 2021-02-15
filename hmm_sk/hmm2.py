@@ -9,7 +9,6 @@ import sys
 import argparse
 from math import log as log
 
-
 def parse(arguments):
 
     parser = argparse.ArgumentParser(description="hmm0 assignment")
@@ -48,9 +47,6 @@ def matrixCreator(array,rows,columns,intCheck=False):
     return matrix
 
 
-def dotProduct(vector1, vector2):
-    return sum(x*y for x,y in zip(vector1,vector2))
-
 def vectorMultiply(vector1,vector2):
     result = []
     if(type(vector2) == float):
@@ -62,41 +58,37 @@ def vectorMultiply(vector1,vector2):
     return result
     
 
-def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
-    rows = len(emissionSequence[0])
-    columns = len(transMatrix)
-    alphaMatrix = [0] * rows * columns
-    alphaMatrix = matrixCreator(alphaMatrix,rows,columns)
-
-    alpha1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
-    for i in range(len(alphaMatrix[0])):
-        alphaMatrix[0][i]= alpha1[i]
-
-    for t in range(1, len(emissionSequence[0])):
-        for j in range(len(transMatrix)):
-            dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
-            alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
-
-    return alphaMatrix
-
 def matrixLog(vector):
-    print(type(vector))
+
     for i in range(len(vector)):
-        if(vector[i])!=0:
+        if(vector[i])!=0.0:
             vector[i]= log(vector[i])
+        else:
+            vector[i]= float('-inf')
     return vector
 
+def matrixAddition(vector1,vector2):
 
-# V = sequence
-# a = transmission
-# b = emission probability
+    result = []
+    if(type(vector2) == float):
+        for x in vector1:
+            result.append(x+vector2)
+    else:
+        for x,y in zip(vector1,vector2):
+            result.append(x+y) 
+    return result
+
 def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
     rows = len(emissionSequence[0])
     columns = len(transMatrix)
+
     omegaMatrix = [0] * rows * columns
     omegaMatrix = matrixCreator(omegaMatrix,rows,columns)
+
     prevMatrix = [0] * (rows-1) * columns
     prevMatrix = matrixCreator(prevMatrix,rows-1,columns)
+
+    likelySeq = [0] * rows
 
     omega1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
     omega1 = matrixLog(omega1)
@@ -104,32 +96,38 @@ def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
     for i in range(len(omegaMatrix[0])):
         omegaMatrix[0][i]= omega1[i]
 
-    # for t in range(1, len(emissionSequence[0])):
-    #     for j in range(len(transMatrix)):
-    #         dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
-    #         alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
-
-
     for t in range(1, rows):
         for j in range(columns):
-            list(zip(*emissionMatrix))[emissionSequence[0][0]])
-            # probability = omegaMatrix[t-1]  + log(emissionMatrix[j][emissionSequence[0][t]])
-            
-            # probability = omega[t - 1] + np.log(a[:, j]) + np.log(b[j, V[t]])
+            log1= matrixLog(list(list(zip(*transMatrix))[j]))
+            try:
+                log2=log(emissionMatrix[j][emissionSequence[0][t]])
+            except:
+                log2 = float('-inf')
+            probability = matrixAddition(matrixAddition(omegaMatrix[t-1],log1),log2)     
+            maxIndex = probability.index(max(probability))
+
+            prevMatrix[t-1][j] = maxIndex
+            omegaMatrix[t][j] = max(probability)
+            # print(probability , 'max ' , maxIndex)
+    
+    latestState = omegaMatrix[rows-1].index(max(omegaMatrix[rows-1]))
+    # print(latestState)
+
+    likelySeq[0] = latestState
  
-            # # This is our most probable state given previous state at time t (1)
-            # prev[t - 1, j] = np.argmax(probability)
- 
-            # # This is the probability of the most probable state (2)
-            # omega[t, j] = np.max(probability)
+    index = 1
+    for i in range(rows - 2, -1, -1):
+        likelySeq[index] = prevMatrix[i][latestState]
+        latestState = prevMatrix[i][latestState]
+        index += 1
 
+    likelySeq = likelySeq[::-1]
 
-
-
-
-    return omegaMatrix
+    return likelySeq
 
 
 transMatrix, emissionMatrix, initialState , emissionSequence = parse(sys.argv[1:])
-LikelySeq = viterbiAlg(emissionSequence,transMatrix,emissionMatrix,initialState)
+likelySeq = viterbiAlg(emissionSequence,transMatrix,emissionMatrix,initialState)
+
+print(' '.join(map(str,likelySeq)))
 
