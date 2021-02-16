@@ -149,12 +149,12 @@ def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
 
     alpha0 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
 
-    for i in range(len(alphaMatrix[0])):
+    for i in range(columns):
         alphaMatrix[0][i]= alpha0[i]
         c0 += alpha0[i]
 
     c0 = 1/c0
-    for i in range(len(alphaMatrix[0])):
+    for i in range(columns):
         alphaMatrix[0][i]*=c0
 
 
@@ -163,7 +163,7 @@ def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
         for j in range(columns):
 
             dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
-            alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
+            alphaMatrix[t][j] = dotProd * emissionMatrix[emissionSequence[0][t]][j]
             ct += alphaMatrix[t][j]
         ct = 1/ct
         for i in range(len(alphaMatrix[0])):
@@ -187,60 +187,76 @@ def betaPass(emissionSequence, transMatrix, emissionMatrix,ctminus1):
 
 
 
-def bwAlgorithm(emissionSequence, transMatrix, emissionMatrix, initialState,iter=100):
+def bwAlgorithm(emissionSequence, transMatrix, emissionMatrix, initialState,iter=10):
 
-    N = len(transMatrix)
-    T = len(emissionSequence[0])
+    N = len(transMatrix) #length of the observation sequence
+    T = len(emissionSequence[0]) #number of states in the model
+    M = len(emissionMatrix[0]) #number of observation symbols
     
     for curr_iter in range(iter):
         alphaMatrix,ctminus1 = alphaPass(emissionSequence,transMatrix,emissionMatrix,initialState)
         betaMatrix  = betaPass(emissionSequence,transMatrix,emissionMatrix,ctminus1)
-        di_gamma = ([0] * N * N)* (T-1)
-        di_gamma = matrixCreator3D(di_gamma,N,N,T-1)
-        gamma = [0] * N * T
+        di_gamma = ([0] * N * N)* (T)
+        di_gamma = matrixCreator3D(di_gamma,N,N,T)
+        gamma = [0] * N * (T)
         gamma = matrixCreator(gamma,N,T)
         
-        for t in range(T - 1):
+        # for t in range(T - 1):
 
-            # alphaTranspose = matrixCreator(alphaMatrix[t],len(alphaMatrix[t]),1)
-            dotCalc1 = dotProduct2([alphaMatrix[t]] , transMatrix)[0]
-            multCalc = vectorMultiply(dotCalc1,emissionMatrix[emissionSequence[0][t+1]])
-            denominator = dotProduct(multCalc,betaMatrix[t+1])
+        #     dotCalc1 = dotProduct2([alphaMatrix[t]] , transMatrix)[0]
+        #     multCalc = vectorMultiply(dotCalc1,emissionMatrix[emissionSequence[0][t+1]])
+        #     denominator = dotProduct(multCalc,betaMatrix[t+1])
+        #     for i in range(N):
+        #         mult1 = vectorMultiply( alphaMatrix[t][i],transMatrix[i])
+        #         mult2 = vectorMultiply( mult1,emissionMatrix[emissionSequence[0][t+1]])        
+        #         numerator = vectorMultiply( mult2,betaMatrix[t+1])    
+        #         for k in range(len(di_gamma[i])):           
+        #             di_gamma[i][k][t] = vectorDivide(numerator, denominator)
+        #             # di_gamma[i][k][t] = numerator
+        #             gamma[i][t] += sum(di_gamma[i][k][t])
+
+        #gamma and di_gamma calculations
+        for t in range (T-1):
             for i in range(N):
-                mult1 = vectorMultiply( alphaMatrix[t][i],transMatrix[i])
-                mult2 = vectorMultiply( mult1,emissionMatrix[emissionSequence[0][t+1]])        
-                numerator = vectorMultiply( mult2,betaMatrix[t+1])    
-                for k in range(len(di_gamma[i])):           
-                    di_gamma[i][k][t] = vectorDivide(numerator, denominator)
-                    # di_gamma[i][k][t] = numerator
-                    gamma[i][t] += sum(di_gamma[i][k][t])
+                gamma[i][t]= 0
+                for j in range(N):
+                    scalar = alphaMatrix[t][i] * transMatrix[i][j] * emissionMatrix[emissionSequence[0][t+1]][j] * betaMatrix[t+1][j]
+                    di_gamma[i][j][t] = scalar
+                    gamma[i][t] += di_gamma[i][j][t]
 
-        for i in range(N-1):
+        
+        # special case
+        for i in range(N):
+            gamma[i][-1] = alphaMatrix[-1][i]
+        print(gamma)
+        # initial state recalculations
+        for i in range (N):
+            initialState[0][i] = gamma[i][0]
+
+        # alpha recalculations
+        for i in range(N):
             denom= 0
-            for t in range(T-2):
+            for t in range(T-1):
                 denom += gamma[i][t]
             
-            for j in range(N-1):
+            for j in range(N):
                 numer = 0
-                for t in range (T-2):
-                    numer += gamma[i][j]
+                for t in range (T-1):
+                    numer += di_gamma[i][j][t]
                 transMatrix[i][j]= numer/denom
 
-        # for i = 0 to N − 1
-        #     denom = 0
-        #     for t = 0 to T − 2
-        #         denom = denom + γt(i)
-        #     next t
 
-        #     for j = 0 to N − 1 
-        #         numer = 0
-        #         for t = 0 to T − 2
-        #             numer = numer + γt(i, j)
-        #         next t
-        #         aij = numer/denom 
-        #     next j
-        # next i
+        for i in range(N):
+            denom = 0
+            for t in range(T):
+                denom += gamma[i][t]
 
+            for j in range(M):
+                numer = 0
+                for t in range(T-1):
+                    if emissionSequence[0][t]==j:
+                        numer += gamma[i][t]
+                    emissionMatrix[i][j]= numer/denom
 
     return transMatrix , emissionMatrix
 
