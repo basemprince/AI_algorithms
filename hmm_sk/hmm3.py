@@ -163,7 +163,7 @@ def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
         for j in range(columns):
 
             dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
-            alphaMatrix[t][j] = dotProd * emissionMatrix[emissionSequence[0][t]][j]
+            alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
             ct += alphaMatrix[t][j]
         ct = 1/ct
         for i in range(len(alphaMatrix[0])):

@@ -8,7 +8,8 @@ Assignment: HMM3
 import sys
 import argparse
 from math import log as log
-import numpy as np
+
+max_iterations = 100
 
 def parse(arguments):
 
@@ -131,11 +132,13 @@ def betaPass(observations, aMatrix, bMatrix, ct_list):
 
     return betaMatrix
 
-def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,iter=100):
+def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,iter):
 
     N = len(aMatrix) #length of the observation sequence
     T = len(observations) #number of states in the model
     M = len(bMatrix[0]) #number of observation symbols
+
+    oldLogProb = float('-inf')
     
     for curr_iter in range(iter):
 
@@ -191,12 +194,23 @@ def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,iter=100):
                         num += gamma[t][i]
                 bMatrix[i][j]= num/den
 
+        # compute log probability of observation given lamda
+        # logProb = 0
+        # for i in range(T):
+        #     logProb += logProb + log(ct_list[i])
+        # logProb *= -1
+
+        # if (logProb>oldLogProb):
+        #     oldLogProb = logProb
+        # else:
+        #     break
+
     return aMatrix , bMatrix
 
 
 aMatrix, bMatrix, piMatrix , observations = parse(sys.argv[1:])
 
-aMatrix , bMatrix = bwAlgorithm(observations, aMatrix, bMatrix, piMatrix)
+aMatrix , bMatrix = bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,max_iterations)
 
 
 parsedTrans = outputParser(aMatrix)
