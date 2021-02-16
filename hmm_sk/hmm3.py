@@ -82,6 +82,7 @@ def dotProduct2(vector1, vector2):
     columns = len(vector2[0])
     result = [0] * rows * columns
     result = matrixCreator(result,rows,columns)
+
     for r in range(rows):
         for c in range(columns):
             total = 0
@@ -144,28 +145,43 @@ def alphaPass(emissionSequence, transMatrix, emissionMatrix, initialState):
     columns = len(transMatrix)
     alphaMatrix = [0] * rows * columns
     alphaMatrix = matrixCreator(alphaMatrix,rows,columns)
+    c0 = 0
 
-    alpha1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
+    alpha0 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
+
     for i in range(len(alphaMatrix[0])):
-        alphaMatrix[0][i]= alpha1[i]
+        alphaMatrix[0][i]= alpha0[i]
+        c0 += alpha0[i]
 
-    for t in range(1, len(emissionSequence[0])):
-        for j in range(len(transMatrix)):
+    c0 = 1/c0
+    for i in range(len(alphaMatrix[0])):
+        alphaMatrix[0][i]*=c0
+
+
+    for t in range(1, rows):
+        ct = 0
+        for j in range(columns):
+
             dotProd =  dotProduct(alphaMatrix[t - 1],list(zip(*transMatrix))[j])
             alphaMatrix[t][j] = dotProd * emissionMatrix[j][emissionSequence[0][t]]
+            ct += alphaMatrix[t][j]
+        ct = 1/ct
+        for i in range(len(alphaMatrix[0])):
+            alphaMatrix[t][i]*=ct
 
-    return alphaMatrix
+    ctminus1 = ct
+    return alphaMatrix, ctminus1
 
-def betaPass(emissionSequence, transMatrix, emissionMatrix):
+def betaPass(emissionSequence, transMatrix, emissionMatrix,ctminus1):
     rows = len(emissionSequence[0])
     columns = len(transMatrix)
-    betaMatrix = ([0] * (rows-1) * columns) + ([1]* columns)
+    betaMatrix = ([ctminus1] * (rows-1) * columns) + ([1]* columns)
     betaMatrix = matrixCreator(betaMatrix,rows,columns)
 
     for t in range(rows - 2, -1, -1):
         for j in range(columns):
             multiplicationStep = vectorMultiply(betaMatrix[t+1],list(zip(*emissionMatrix))[emissionSequence[0][t+1]])
-            betaMatrix[t][j] = dotProduct(multiplicationStep , transMatrix[j])
+            betaMatrix[t][j] = dotProduct(multiplicationStep , transMatrix[j]) * ctminus1
 
     return betaMatrix
 
@@ -173,36 +189,58 @@ def betaPass(emissionSequence, transMatrix, emissionMatrix):
 
 def bwAlgorithm(emissionSequence, transMatrix, emissionMatrix, initialState,iter=100):
 
-    M = len(transMatrix)
+    N = len(transMatrix)
     T = len(emissionSequence[0])
-
+    
     for curr_iter in range(iter):
-        alphaMatrix = alphaPass(emissionSequence,transMatrix,emissionMatrix,initialState)
-        betaMatrix  = betaPass(emissionSequence,transMatrix,emissionMatrix)
-
-        xi = ([0] * M * M)* (T-1)
-        xi = matrixCreator3D(xi,M,M,T-1)
+        alphaMatrix,ctminus1 = alphaPass(emissionSequence,transMatrix,emissionMatrix,initialState)
+        betaMatrix  = betaPass(emissionSequence,transMatrix,emissionMatrix,ctminus1)
+        di_gamma = ([0] * N * N)* (T-1)
+        di_gamma = matrixCreator3D(di_gamma,N,N,T-1)
+        gamma = [0] * N * T
+        gamma = matrixCreator(gamma,N,T)
         
         for t in range(T - 1):
-            
-            dotCalc1 = dotProduct2([list(list(zip(*alphaMatrix))[t])] , transMatrix)[0]
 
-            b_temp = list(zip(*emissionMatrix))
-            b_trans=list((list(zip(*b_temp))[emissionSequence[0][t+1]]))
-
-            multCalc = vectorMultiply(dotCalc1,b_trans)
+            # alphaTranspose = matrixCreator(alphaMatrix[t],len(alphaMatrix[t]),1)
+            dotCalc1 = dotProduct2([alphaMatrix[t]] , transMatrix)[0]
+            multCalc = vectorMultiply(dotCalc1,emissionMatrix[emissionSequence[0][t+1]])
             denominator = dotProduct(multCalc,betaMatrix[t+1])
-            for i in range(M):
+            for i in range(N):
                 mult1 = vectorMultiply( alphaMatrix[t][i],transMatrix[i])
-                mult2 = vectorMultiply( mult1,b_trans)
-                numerator = vectorMultiply( mult2,list(zip(*betaMatrix))[t+1])    
-                for k in range(len(xi[i])):           
-                    xi[i][k][t] = vectorDivide(numerator, denominator)
+                mult2 = vectorMultiply( mult1,emissionMatrix[emissionSequence[0][t+1]])        
+                numerator = vectorMultiply( mult2,betaMatrix[t+1])    
+                for k in range(len(di_gamma[i])):           
+                    di_gamma[i][k][t] = vectorDivide(numerator, denominator)
+                    # di_gamma[i][k][t] = numerator
+                    gamma[i][t] += sum(di_gamma[i][k][t])
 
-        
-        gamma = sum(xi)
-        print(gamma)
-    # print(xi)
+        for i in range(N-1):
+            denom= 0
+            for t in range(T-2):
+                denom += gamma[i][t]
+            
+            for j in range(N-1):
+                numer = 0
+                for t in range (T-2):
+                    numer += gamma[i][j]
+                transMatrix[i][j]= numer/denom
+
+        # for i = 0 to N − 1
+        #     denom = 0
+        #     for t = 0 to T − 2
+        #         denom = denom + γt(i)
+        #     next t
+
+        #     for j = 0 to N − 1 
+        #         numer = 0
+        #         for t = 0 to T − 2
+        #             numer = numer + γt(i, j)
+        #         next t
+        #         aij = numer/denom 
+        #     next j
+        # next i
+
 
     return transMatrix , emissionMatrix
 
@@ -210,7 +248,9 @@ def bwAlgorithm(emissionSequence, transMatrix, emissionMatrix, initialState,iter
 transMatrix, emissionMatrix, initialState , emissionSequence = parse(sys.argv[1:])
 transMatrix , emissionMatrix = bwAlgorithm(emissionSequence, transMatrix, emissionMatrix, initialState)
 
+parsedTrans = outputParser(transMatrix)
+parsedEmission = outputParser(emissionMatrix)
 
-
-# print(' '.join(map(str,likelySeq)))
+print(' '.join(map(str,parsedTrans)))
+print(' '.join(map(str,parsedEmission)))
 
