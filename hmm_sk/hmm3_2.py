@@ -9,7 +9,7 @@ import sys
 import argparse
 from math import log as log
 
-max_iterations = 100
+maxIter = 1000000
 
 def parse(arguments):
 
@@ -132,15 +132,15 @@ def betaPass(observations, aMatrix, bMatrix, ct_list):
 
     return betaMatrix
 
-def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,iter):
+def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix):
 
-    N = len(aMatrix) #length of the observation sequence
-    T = len(observations) #number of states in the model
+    N = len(aMatrix) #number of states in the model
+    T = len(observations) #length of the observation sequence
     M = len(bMatrix[0]) #number of observation symbols
 
     oldLogProb = float('-inf')
-    
-    for curr_iter in range(iter):
+    current_iter = 0
+    while current_iter <= maxIter:
 
         alphaMatrix,ct_list = alphaPass(observations,aMatrix,bMatrix,piMatrix)
         betaMatrix  = betaPass(observations,aMatrix,bMatrix,ct_list)
@@ -195,26 +195,35 @@ def bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,iter):
                 bMatrix[i][j]= num/den
 
         # compute log probability of observation given lamda
-        # logProb = 0
-        # for i in range(T):
-        #     logProb += logProb + log(ct_list[i])
-        # logProb *= -1
+        current_iter+=1
+        print("\r" + str(current_iter), end="")
+        logProb = 0
+        for i in range(T):
+            logProb +=  log(ct_list[i])
+        
+        logProb *= -1
 
-        # if (logProb>oldLogProb):
-        #     oldLogProb = logProb
-        # else:
-        #     break
+        if (logProb>oldLogProb):
+            oldLogProb = logProb
+        else:
+            break
 
-    return aMatrix , bMatrix
+    return aMatrix , bMatrix , piMatrix , current_iter
 
 
 aMatrix, bMatrix, piMatrix , observations = parse(sys.argv[1:])
 
-aMatrix , bMatrix = bwAlgorithm(observations, aMatrix, bMatrix, piMatrix,max_iterations)
+aMatrix , bMatrix ,piMatrix , current_iter= bwAlgorithm(observations, aMatrix, bMatrix, piMatrix)
 
+print('iterations: ', current_iter)
+print(aMatrix)
+print('------------------')
+print(bMatrix)
+print('------------------')
+print(piMatrix)
 
-parsedTrans = outputParser(aMatrix)
-parsedEmission = outputParser(bMatrix)
+# parsedTrans = outputParser(aMatrix)
+# parsedEmission = outputParser(bMatrix)
 
-print(' '.join(map(str,parsedTrans)))
-print(' '.join(map(str,parsedEmission)))
+# print(' '.join(map(str,parsedTrans)))
+# print(' '.join(map(str,parsedEmission)))
