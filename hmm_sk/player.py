@@ -6,15 +6,20 @@ import random
 import time
 from math import log as log
 
-T_cap = 15 # cap for observatinos allowed
-N_cap = 2 # max number of states in the model
-M = N_EMISSIONS #number of observation symbols
-max_iterations = 400
+random.seed(30)
 
-merge = False
+T_cap = 10 # cap for observatinos allowed
+N_cap = 1 # max number of states in the model
+M = N_EMISSIONS #number of observation symbols
+
+max_iterations = 10000
+lowest_prob = 1.0e-08
+
 n_optimize = False
 limit_obs = True
+type_compare = True
 debug = False
+
 
 class PlayerControllerHMM(PlayerControllerHMMAbstract):
 
@@ -24,12 +29,17 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         such as the initialization of models, or fishes, among others.
         """
 
-        self.lambdas = []
+        self.lambdas = [] # lambda model for each fish
         self.fish_observations = [[] for _ in range(N_FISH)]  # [fish_id][step]
         self.revealed_fish = {} # {fish_id : fish_type}
         self.fish_w_types = [[] for _ in range(N_SPECIES)] # which fish have same type [fish_type][fish_id]
         self.bestGuess = {} # {fish_id : fish_type}
         self.guess_sequence = [0,N_FISH*0.25,N_FISH*0.5,N_FISH*0.75,N_FISH-1]
+        self.type_comparer = [[] for _ in range(N_SPECIES)] # which fish have same type [fish_type][fish_id]
+        self.guess_counter = 0
+        self.correct_counter = 0
+        self.score = [[0,0] for _ in range(N_SPECIES)]
+        self.none_counter = 0
         for _ in range(N_FISH):
             model = LAMBDAMODEL()
             self.lambdas.append(model)
@@ -44,14 +54,19 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         :param observations: a list of N_FISH observations, encoded as integers
         :return: None or a tuple (fish_id, fish_type)
         """
+        
         if limit_obs:
             self.observation_compiler_limited(observations)
         else: 
             self.observation_compiler(observations)
-        
 
         self.bestGuess = {}
-        if step > 5:
+
+        # if len(self.revealed_fish) / N_FISH > 0.7:
+        #     global N_cap       
+        #     N_cap = 1
+
+        if step > 3:
             for fish_id, model in enumerate(self.lambdas):
                 if model.fish_type == None:
                     continue
@@ -64,14 +79,14 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
                     model.bwAlgorithm(self.fish_observations[fish_id])
 
             for fish_id, obs in enumerate(self.fish_observations):
-                
+                self.type_comparer = [[] for _ in range(N_SPECIES)]
                 if fish_id in self.revealed_fish:
                     continue
+
                 highestProb = 0
                 mostProbType = 0
                 known_fish_id_highest = 0
-                for known_fish_id , model in enumerate(self.lambdas):
-                    
+                for known_fish_id , model in enumerate(self.lambdas):         
                     if not model.taught or model.fish_type == None:
                         continue
                     prob = model.probability_of_sequence(obs)
@@ -79,13 +94,23 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
                     # matrixPrinter(model.aMatrix, 'models aMatrix')
                     # matrixPrinter(model.bMatrix, 'models bMatrix')
                     # matrixPrinter(model.piMatrix, 'models piMatrix')
-                    # print('fish_id: ', fish_id, ' , known_fish_id: ', known_fish_id, 'fish_type: ', model.fish_type , ' , probability: ', prob, 'most_prob_type: ', mostProbModel)
+                    # print('fish_id: ', fish_id, ' , known_fish_id: ', known_fish_id, 'fish_type: ', model.fish_type , ' , probability: ', prob, 'most_prob_type: ', mostProbType)
                     # time.sleep(0.1)
-                    if prob > highestProb:
+                    
+                    if type_compare:
+                        self.type_comparer[model.fish_type].append(prob)
+                    elif prob > highestProb:
                         highestProb = prob
                         mostProbType = model.fish_type
                         known_fish_id_highest = known_fish_id
-                self.bestGuess.update({fish_id:[mostProbType,highestProb,known_fish_id_highest]})
+
+                if type_compare:                
+                    self.type_comparer = average_of_columns(self.type_comparer)
+                    mostProbType = max(range(len(self.type_comparer)), key=self.type_comparer.__getitem__)
+                    highestProb = self.type_comparer[mostProbType]
+                    self.bestGuess.update({fish_id:[mostProbType,highestProb,fish_id]})
+                else:
+                    self.bestGuess.update({fish_id:[mostProbType,highestProb,known_fish_id_highest]})
         # print('all the list ' , self.bestGuess)
         
 
@@ -94,14 +119,33 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         #         print('fish #: ' , i, ' , ' ,self.fish_observations[i])
 
         upcoming_guess = None
-        if self.bestGuess != {}:
+        if self.bestGuess != {} and not type_compare:
             chosen_fish = max(self.bestGuess.items(), key=lambda k: k[1][1])
-            print('best_guess: ', chosen_fish , 'T length:' ,  self.lambdas[chosen_fish[1][2]].T)
-            upcoming_guess = [chosen_fish[0],chosen_fish[1][0]]
+            if debug:
+                print('best_guess: ', chosen_fish , 'T length: ' ,  self.lambdas[chosen_fish[1][2]].T, 'N length: ', self.lambdas[chosen_fish[1][2]].N)
+            upcoming_guess = [chosen_fish[0],chosen_fish[1][0],chosen_fish[1][1]]
 
-        
+        if self.bestGuess != {} and type_compare:
+            chosen_fish = max(self.bestGuess.items(), key=lambda k: k[1][1])
+            if debug:          
+                print('best_guess: ', chosen_fish , 'T length: ' ,  self.lambdas[chosen_fish[1][2]].T, 'N length: ', self.lambdas[chosen_fish[1][2]].N)
+            upcoming_guess = [chosen_fish[0],chosen_fish[1][0],chosen_fish[1][1]]
+
+        if self.none_counter > 7:
+            global lowest_prob
+            lowest_prob*= 1.0e-1
+    
+        if debug:
+            print('percent_accuracy: ', round(self.correct_counter/self.guess_counter * 100.0,0) if self.guess_counter!=0 else 0 , ' %')
+
         if upcoming_guess != None:
-            return (upcoming_guess[0], upcoming_guess[1])
+            if upcoming_guess[2] > lowest_prob:
+                # print(upcoming_guess[2])
+                self.none_counter = 0
+                return (upcoming_guess[0], upcoming_guess[1])
+            else:
+                self.none_counter+=1
+                return None
         else:    
             return (int(self.guess_sequence[step-1]), random.randint(0, N_SPECIES - 1))
 
@@ -125,6 +169,23 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         :param true_type: the correct type of the fish
         :return:
         """
+        self.guess_counter +=1
+        if correct:
+            self.correct_counter +=1
+
+        self.score[true_type][int(correct)] +=1
+        score_board = []
+        for i in self.score:
+            row_sum = sum(i)
+            if row_sum != 0:
+                accuracy = int(i[1]/row_sum*100)
+            else:
+                accuracy = None
+            score_board.append(accuracy)
+        
+        if debug:
+            print('the guesss is: ' , correct, 'actual id for fish ' , fish_id , ' is: ', true_type)
+            print(score_board)
         self.revealed_fish.update({fish_id:true_type})
         self.fish_w_types[true_type].append(fish_id)
         self.lambdas[fish_id].fish_type = true_type
@@ -175,6 +236,15 @@ def column_delete (matrix,column_index):
         matrix.pop(column_index)    
     return matrix
 
+def average_of_columns(matrix):
+    rows= len(matrix)
+    for row in range(rows):
+        column_count = len (matrix[row])
+        if column_count !=0:
+            matrix[row] = sum(matrix[row])/column_count
+        else: matrix[row] = 0.0
+    return matrix
+
 class LAMBDAMODEL:
     def __init__(self):
         self.fish_type = None
@@ -185,9 +255,7 @@ class LAMBDAMODEL:
         self.N = N_cap
         self.T = 0
 
-        self.alphaMatrix = []
-        self.betaMatrix = []
-        self.ct_list = []
+
         self.maxIter = max_iterations
         self.taught = False
 
@@ -224,51 +292,53 @@ class LAMBDAMODEL:
         return obs_len if obs_len <=T_cap else T_cap
 
     def alphaPass(self,observations):
-        self.alphaMatrix = [0] * self.T * self.N
-        self.alphaMatrix = matrixCreator(self.alphaMatrix,self.T,self.N)
-        self.ct_list = [0]
+        alphaMatrix = [0] * self.T * self.N
+        alphaMatrix = matrixCreator(alphaMatrix,self.T,self.N)
+        ct_list = [0]
         
         start_ob = observations[0]
+        for i in range (self.N):
+            alphaMatrix[0][i] = self.piMatrix[i] * self.bMatrix[i][start_ob]
+            ct_list[0] += alphaMatrix[0][i]
+
+        # if self.ct_list[0]!=0:
+        ct_list[0] = 1/ ct_list[0]
 
         for i in range (self.N):
-            self.alphaMatrix[0][i] = self.piMatrix[i] * self.bMatrix[i][start_ob]
-            self.ct_list[0] += self.alphaMatrix[0][i]
-
-        if self.ct_list[0]!=0:
-            self.ct_list[0] = 1/ self.ct_list[0]
-
-        for i in range (self.N):
-            self.alphaMatrix[0][i] *= self.ct_list[0]
+            alphaMatrix[0][i] *= ct_list[0]
 
         for t in range (1, self.T):
 
-            self.ct_list.append(0)
+            ct_list.append(0)
 
             for i in range (self.N):
                 for j in range (self.N):
-                    self.alphaMatrix[t][i]+= self.alphaMatrix[t-1][j] * self.aMatrix[j][i]
+                    alphaMatrix[t][i]+= alphaMatrix[t-1][j] * self.aMatrix[j][i]
                 current_ob = observations[t]
-                self.alphaMatrix[t][i]*= self.bMatrix[i][current_ob]
-                self.ct_list[t] += self.alphaMatrix[t][i]
+                alphaMatrix[t][i]*= self.bMatrix[i][current_ob]
+                ct_list[t] += alphaMatrix[t][i]
 
-            if self.ct_list[t]!=0:    
-                self.ct_list[t] = 1/self.ct_list[t]
+            # if self.ct_list[t]!=0:    
+            ct_list[t] = 1/ct_list[t]
 
             for i in range (self.N):
-                self.alphaMatrix[t][i] *= self.ct_list[t]
+                alphaMatrix[t][i] *= ct_list[t]
+
+        return alphaMatrix , ct_list
 
 
-    def betaPass(self,observations):
-        self.betaMatrix = ([0] * (self.T-1) * self.N) + ([self.ct_list[self.T-1]]* self.N)
-        self.betaMatrix = matrixCreator(self.betaMatrix,self.T,self.N)
+    def betaPass(self,observations,ct_list):
+        betaMatrix = ([0] * (self.T-1) * self.N) + ([ct_list[self.T-1]]* self.N)
+        betaMatrix = matrixCreator(betaMatrix,self.T,self.N)
 
         for t in range (self.T-2 , -1 , -1):
             for i in range (self.N):
-                self.betaMatrix[t][i]=0
+                betaMatrix[t][i]=0
                 for j in range (self.N):
                     next_ob = observations[t+1]
-                    self.betaMatrix[t][i] += self.aMatrix[i][j] * self.bMatrix[j][next_ob] * self.betaMatrix[t+1][j]
-                self.betaMatrix[t][i]*= self.ct_list[t]
+                    betaMatrix[t][i] += self.aMatrix[i][j] * self.bMatrix[j][next_ob] * betaMatrix[t+1][j]
+                betaMatrix[t][i]*= ct_list[t]
+        return betaMatrix
 
     def zero_counter (self,matrix):
         zero_count = 0
@@ -289,12 +359,13 @@ class LAMBDAMODEL:
         stored_model[3]= column_delete(stored_model[3],least_likely_index)
         stored_model[4]= stored_model[4].pop(least_likely_index)
 
-    def bwAlgorithm_starter(self,observatinos):
+    def bwAlgorithm_starter(self,observations):
         model_store = []
-        for state_count in range (N_cap, 1 , -1):
+        self.T = self.set_T(len(observations))
+        for state_count in range (N_cap, 0 , -1):
             self.N = state_count
             self.initialize_lambda_model()
-            aMatrix,bMatrix,piMatrix,logProb = self.bwAlgorithm(observatinos)
+            aMatrix,bMatrix,piMatrix,logProb = self.bwAlgorithm(observations,True)
             zero_count = self.zero_counter(aMatrix)
             nK = (state_count * (state_count-1)) - zero_count
             bic = logProb - ((nK/2)*self.T)
@@ -312,14 +383,16 @@ class LAMBDAMODEL:
  
 
 
-    def bwAlgorithm(self,observations):
+    def bwAlgorithm(self,observations,obtimize=False):
         self.T = self.set_T(len(observations))
+        if not obtimize:
+            self.N = N_cap
         oldLogProb = float('-inf')
         current_iter = 0
         while current_iter <= self.maxIter:
 
-            self.alphaPass(observations)
-            self.betaPass(observations)
+            alphaMatrix, ct_list = self.alphaPass(observations)
+            betaMatrix = self.betaPass(observations,ct_list)
 
             di_gamma = [0] * self.T * self.N * self.N
             di_gamma = matrixCreator(di_gamma,self.T,self.N,self.N)
@@ -333,13 +406,12 @@ class LAMBDAMODEL:
                     gamma[t][i]= 0
                     for j in range(self.N):
                         next_ob = observations[t+1]
-                        di_gamma[t][i][j] = self.alphaMatrix[t][i] * self.aMatrix[i][j] * self.bMatrix[j][next_ob] * self.betaMatrix[t+1][j]
+                        di_gamma[t][i][j] = alphaMatrix[t][i] * self.aMatrix[i][j] * self.bMatrix[j][next_ob] * betaMatrix[t+1][j]
                         gamma[t][i] += di_gamma[t][i][j]
-
-            
+  
             # special case
             for i in range(self.N):
-                gamma[-1][i] = self.alphaMatrix[-1][i]
+                gamma[-1][i] = alphaMatrix[-1][i]
 
             # initial state recalculations
             for i in range (self.N):
@@ -374,15 +446,16 @@ class LAMBDAMODEL:
             current_iter+=1
             logProb = 0
             for i in range(self.T):
-                logProb +=  log(self.ct_list[i]) #if self.ct_list[i]!= 0 else float('inf')
+                logProb +=  log(ct_list[i]) #if self.ct_list[i]!= 0 else float('inf')
             
             logProb *= -1
-            # print(current_iter)
+            
             if (logProb>oldLogProb):
                 oldLogProb = logProb
             else:
                 break
             self.taught = True
+        # print(current_iter)
         return self.aMatrix , self.bMatrix, self.piMatrix, logProb
 
     def probability_of_sequence(self,observations):
