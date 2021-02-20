@@ -8,11 +8,11 @@ from math import log as log
 
 random.seed(30)
 
-T_cap = 10 # cap for observatinos allowed
+T_cap = int(N_STEPS/9) # cap for observatinos allowed
 N_cap = 1 # max number of states in the model
 M = N_EMISSIONS #number of observation symbols
 
-max_iterations = 10000
+max_iterations = 1000000
 lowest_prob = 1.0e-08
 
 n_optimize = False
@@ -131,7 +131,7 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
                 print('best_guess: ', chosen_fish , 'T length: ' ,  self.lambdas[chosen_fish[1][2]].T, 'N length: ', self.lambdas[chosen_fish[1][2]].N)
             upcoming_guess = [chosen_fish[0],chosen_fish[1][0],chosen_fish[1][1]]
 
-        if self.none_counter > 7:
+        if self.none_counter > 4:
             global lowest_prob
             lowest_prob*= 1.0e-1
     
