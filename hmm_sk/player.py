@@ -6,9 +6,9 @@ import random
 import time
 from math import log as log
 
-random.seed(30)
+random.seed(40)
 
-T_cap = int(N_STEPS/9) # cap for observatinos allowed
+T_cap = int(N_STEPS/12) # cap for observatinos allowed
 N_cap = 1 # max number of states in the model
 M = N_EMISSIONS #number of observation symbols
 
@@ -40,6 +40,7 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         self.correct_counter = 0
         self.score = [[0,0] for _ in range(N_SPECIES)]
         self.none_counter = 0
+        self.un_encountered = [1] * N_SPECIES
         for _ in range(N_FISH):
             model = LAMBDAMODEL()
             self.lambdas.append(model)
@@ -112,7 +113,7 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
                 else:
                     self.bestGuess.update({fish_id:[mostProbType,highestProb,known_fish_id_highest]})
         # print('all the list ' , self.bestGuess)
-        
+ 
 
         # if len(self.fish_w_types[0]) >1:
         #     for i in self.fish_w_types[0]:
@@ -121,12 +122,14 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         upcoming_guess = None
         if self.bestGuess != {} and not type_compare:
             chosen_fish = max(self.bestGuess.items(), key=lambda k: k[1][1])
+            # del self.bestGuess[chosen_fish[0]]
             if debug:
                 print('best_guess: ', chosen_fish , 'T length: ' ,  self.lambdas[chosen_fish[1][2]].T, 'N length: ', self.lambdas[chosen_fish[1][2]].N)
             upcoming_guess = [chosen_fish[0],chosen_fish[1][0],chosen_fish[1][1]]
 
         if self.bestGuess != {} and type_compare:
             chosen_fish = max(self.bestGuess.items(), key=lambda k: k[1][1])
+            # del self.bestGuess[chosen_fish[0]]
             if debug:          
                 print('best_guess: ', chosen_fish , 'T length: ' ,  self.lambdas[chosen_fish[1][2]].T, 'N length: ', self.lambdas[chosen_fish[1][2]].N)
             upcoming_guess = [chosen_fish[0],chosen_fish[1][0],chosen_fish[1][1]]
@@ -134,9 +137,10 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         if self.none_counter > 4:
             global lowest_prob
             lowest_prob*= 1.0e-1
+
     
         if debug:
-            print('percent_accuracy: ', round(self.correct_counter/self.guess_counter * 100.0,0) if self.guess_counter!=0 else 0 , ' %')
+            print('percent_accuracy: ', round(self.correct_counter/len(self.revealed_fish) * 100.0,0) if len(self.revealed_fish)!=0 else 0 , ' %')
 
         if upcoming_guess != None:
             if upcoming_guess[2] > lowest_prob:
@@ -169,7 +173,7 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         :param true_type: the correct type of the fish
         :return:
         """
-        self.guess_counter +=1
+
         if correct:
             self.correct_counter +=1
 
@@ -189,6 +193,9 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         self.revealed_fish.update({fish_id:true_type})
         self.fish_w_types[true_type].append(fish_id)
         self.lambdas[fish_id].fish_type = true_type
+        self.un_encountered[true_type] = 0
+        if debug:
+            print(self.un_encountered)
         
 
 def matrixCreator(array,rows,columns,elements=0,intCheck=False):
