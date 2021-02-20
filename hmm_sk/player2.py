@@ -6,8 +6,8 @@ import random
 import time
 from math import log as log
 
-T_cap = 15 # cap for observatinos allowed
-N_cap = 2 # max number of states in the model
+T_cap = 10 # cap for observatinos allowed
+N_cap = 3 # max number of states in the model
 M = N_EMISSIONS #number of observation symbols
 max_iterations = 400
 
@@ -29,8 +29,8 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         self.revealed_fish = {} # {fish_id : fish_type}
         self.fish_w_types = [[] for _ in range(N_SPECIES)] # which fish have same type [fish_type][fish_id]
         self.bestGuess = {} # {fish_id : fish_type}
-        self.guess_sequence = [0,N_FISH*0.25,N_FISH*0.5,N_FISH*0.75,N_FISH-1]
-        for _ in range(N_FISH):
+
+        for _ in range(N_SPECIES):
             model = LAMBDAMODEL()
             self.lambdas.append(model)
 
@@ -52,40 +52,49 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
 
         self.bestGuess = {}
         if step > 5:
-            for fish_id, model in enumerate(self.lambdas):
-                if model.fish_type == None:
-                    continue
-                # model.initialize_lambda_model()
+            for fish_type, model in enumerate(self.lambdas):
                 
-                if n_optimize:
-                    model.bwAlgorithm_starter(self.fish_observations[fish_id])
-                else:
-                    model.initialize_lambda_model()
-                    model.bwAlgorithm(self.fish_observations[fish_id])
+                # model.initialize_lambda_model()
+                if self.fish_w_types[fish_type] != []:
+                    if merge:
+                        known_fish_ids = self.fish_w_types[fish_type]
+                        all_obs = []
+                        for current in known_fish_ids:
+                            all_obs += self.fish_observations[current]
+                        if n_optimize:
+                            model.bwAlgorithm_starter(all_obs)
+                        else:
+                            model.initialize_lambda_model()
+                            model.bwAlgorithm(all_obs)
+                    else:
+                        known_fish_id = self.fish_w_types[fish_type][0]
+                        if n_optimize:
+                            model.bwAlgorithm_starter(self.fish_observations[known_fish_id])
+                        else:
+                            model.initialize_lambda_model()
+                            model.bwAlgorithm(self.fish_observations[known_fish_id])
 
             for fish_id, obs in enumerate(self.fish_observations):
                 
                 if fish_id in self.revealed_fish:
                     continue
                 highestProb = 0
-                mostProbType = 0
-                known_fish_id_highest = 0
-                for known_fish_id , model in enumerate(self.lambdas):
+                mostProbModel = 0
+                for model_id , model in enumerate(self.lambdas):
                     
-                    if not model.taught or model.fish_type == None:
+                    if not model.taught:
                         continue
                     prob = model.probability_of_sequence(obs)
 
                     # matrixPrinter(model.aMatrix, 'models aMatrix')
                     # matrixPrinter(model.bMatrix, 'models bMatrix')
                     # matrixPrinter(model.piMatrix, 'models piMatrix')
-                    # print('fish_id: ', fish_id, ' , known_fish_id: ', known_fish_id, 'fish_type: ', model.fish_type , ' , probability: ', prob, 'most_prob_type: ', mostProbModel)
-                    # time.sleep(0.1)
+                    # print('fish_id: ', fish_id, ' , fish_type: ', model_id , ' , probability: ', prob, 'most_prob_type: ', mostProbModel)
+                    # time.sleep(0.4)
                     if prob > highestProb:
                         highestProb = prob
-                        mostProbType = model.fish_type
-                        known_fish_id_highest = known_fish_id
-                self.bestGuess.update({fish_id:[mostProbType,highestProb,known_fish_id_highest]})
+                        mostProbModel = model_id
+                self.bestGuess.update({fish_id:[mostProbModel,highestProb]})
         # print('all the list ' , self.bestGuess)
         
 
@@ -96,14 +105,15 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         upcoming_guess = None
         if self.bestGuess != {}:
             chosen_fish = max(self.bestGuess.items(), key=lambda k: k[1][1])
-            print('best_guess: ', chosen_fish , 'T length:' ,  self.lambdas[chosen_fish[1][2]].T)
-            upcoming_guess = [chosen_fish[0],chosen_fish[1][0]]
+            # print('best_guess: ', chosen_fish , 'T length:' ,  self.lambdas[chosen_fish[1][0]].T)
+            upcoming_guess = [chosen_fish[0],chosen_fish[1][0], chosen_fish[1][1]]
 
         
         if upcoming_guess != None:
+            # print('guess porb: ', upcoming_guess[2])
             return (upcoming_guess[0], upcoming_guess[1])
-        else:    
-            return (int(self.guess_sequence[step-1]), random.randint(0, N_SPECIES - 1))
+        else:
+            return (step % N_FISH, random.randint(0, N_SPECIES - 1))
 
     def observation_compiler(self, observations):
         for fish_id , obs in enumerate(observations):
@@ -127,7 +137,6 @@ class PlayerControllerHMM(PlayerControllerHMMAbstract):
         """
         self.revealed_fish.update({fish_id:true_type})
         self.fish_w_types[true_type].append(fish_id)
-        self.lambdas[fish_id].fish_type = true_type
         
 
 def matrixCreator(array,rows,columns,elements=0,intCheck=False):
@@ -177,7 +186,6 @@ def column_delete (matrix,column_index):
 
 class LAMBDAMODEL:
     def __init__(self):
-        self.fish_type = None
         self.aMatrix = []
         self.bMatrix = []
         self.piMatrix = []

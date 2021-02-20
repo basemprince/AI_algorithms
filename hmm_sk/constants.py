@@ -15,6 +15,6 @@ N_EMISSIONS = 8
 
 # Time limit per each guess (in seconds)
 # You can change this value locally, but it will be fixed to 5 on Kattis
-STEP_TIME_THRESHOLD = 900
+STEP_TIME_THRESHOLD = 5
 
 
