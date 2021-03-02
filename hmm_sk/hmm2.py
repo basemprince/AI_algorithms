@@ -79,8 +79,8 @@ def matrixAddition(vector1,vector2):
     return result
 
 def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
-    rows = len(emissionSequence[0])
-    columns = len(transMatrix)
+    rows = len(emissionSequence[0]) #observation count
+    columns = len(transMatrix) #state count
 
     omegaMatrix = [0] * rows * columns
     omegaMatrix = matrixCreator(omegaMatrix,rows,columns)
@@ -90,12 +90,15 @@ def viterbiAlg(emissionSequence, transMatrix, emissionMatrix, initialState):
 
     likelySeq = [0] * rows
 
-    omega1 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
-    omega1 = matrixLog(omega1)
+    # initialize omega 0  : δ0 (𝑖) =logπ'𝑏' 𝑂0 ,𝑖=1,...,𝑁
+    omega0 = vectorMultiply(initialState[0] , list(zip(*emissionMatrix))[emissionSequence[0][0]])
+    omega0 = matrixLog(omega0)
 
     for i in range(len(omegaMatrix[0])):
-        omegaMatrix[0][i]= omega1[i]
+        omegaMatrix[0][i]= omega0[i]
 
+
+ 
     for t in range(1, rows):
         for j in range(columns):
             log1= matrixLog(list(list(zip(*transMatrix))[j]))
